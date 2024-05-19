@@ -1,10 +1,10 @@
 function PAM.Start(vote_type, vote_length_override, winner_callback_override)
 	if PAM.state ~= PAM.STATE_DISABLED then return end
 
-	PAM.vote_type = vote_type or "map"
-	PAM.winner_callback = winner_callback_override or PAM.ChangeMap
+	PAM.vote_type = vote_type or PAM.extension_handler.RunReturningEvent("GetDefaultVoteType") or "map"
+	PAM.winner_callback = winner_callback_override or PAM.type_callbacks[PAM.vote_type] or PAM.ChangeMap
 
-	local vote_length = vote_length_override or PAM.vote_length:GetActiveValue()
+	local vote_length = vote_length_override or PAM.extension_handler.RunReturningEvent("GetVoteLength", PAM.vote_type) or PAM.vote_length:GetActiveValue()
 
 	PAM.options = {}
 	PAM.votes = {}
@@ -81,6 +81,10 @@ function PAM.RegisterOption(option_name, option_win_callback)
 	end
 
 	PAM.options[PAM.option_count] = option
+end
+
+function PAM.RegisterTypeHandler(vote_type, winner_callback)
+	PAM.type_callbacks[vote_type] = winner_callback
 end
 
 function PAM.MakeOptionWin(option)

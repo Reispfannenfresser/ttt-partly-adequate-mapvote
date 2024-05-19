@@ -1,15 +1,26 @@
 PAM_EXTENSION.name = "terrortown_support"
 PAM_EXTENSION.enabled = true
 
-function PAM_EXTENSION:OnInitialize()
+function PAM_EXTENSION:CanEnable()
 	-- terrortown support
-	if GAMEMODE_NAME ~= "terrortown" then return end
+	if engine.ActiveGamemode() ~= "terrortown" then return false end
+end
 
+local custom_round_counter_extension
+function PAM_EXTENSION:OnInitialize()
+	custom_round_counter_extension = PAM.extension_handler.GetExtension("custom_round_counter")
 
 	-- Notify PAM that the round has ended
 	hook.Add("TTTEndRound", "PAM_RoundEnded", function()
 		PAM.EndRound()
 	end)
+
+	local maxRounds = custom_round_counter_extension.enabled and custom_round_counter_extension.round_limit:GetActiveValue()
+	if maxRounds then
+		hook.Add("TTTInitPostEntity", "PAM_SetRoundsLeft", function()
+			SetGlobalInt("ttt_rounds_left", maxRounds)
+		end)
+	end
 
 	-- ttt2/ttt2
 	if TTT2 then

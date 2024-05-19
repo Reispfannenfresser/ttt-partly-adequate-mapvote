@@ -19,15 +19,13 @@ local function RegisterExtension()
 	extension.enabled = enabled_setting:GetActiveValue()
 
 	enabled_setting:AddCallback("extension handler", function(value)
-		extension.enabled = value
+		extension.enabled = (extension.CanEnable and extension:CanEnable() != false and value) or (!extension.CanEnable and value)
 
 		if value then
 			if extension.OnEnable then
 				extension:OnEnable()
 			end
-			return
-		end
-		if extension.OnDisable then
+		elseif extension.OnDisable then
 			extension:OnDisable()
 		end
 	end)
@@ -36,12 +34,19 @@ local function RegisterExtension()
 	PAM.extensions[id] = extension
 	extension_indices[extension_name] = id
 
-	if extension.enabled and extension.OnEnable then
-		extension:OnEnable()
-	end
-
 	if extension.Initialize then
 		extension:Initialize()
+	end
+
+	if extension.CanEnable then
+		-- Only disable if we return false, if nothing is returned we will assume it doesn't want to be turned off
+		if extension:CanEnable() == false then
+			extension.enabled = false
+		end
+	end
+
+	if extension.enabled and extension.OnEnable then
+		extension:OnEnable()
 	end
 
 	print("[PAM] Registered extension \"" .. extension_name .. "\" (" .. (extension.enabled and "enabled" or "disabled") .. ")")
@@ -91,6 +96,15 @@ function PAM.extension_handler.RunAvalanchingEvent(event_name, combine, ...)
 	end
 
 	return combined_result
+end
+
+function PAM.extension_handler.GetExtension(name)
+	for i = 1, #PAM.extensions do
+		local extension = PAM.extensions[i]
+		if extension.name == name then
+			return extension
+		end
+	end
 end
 
 hook.Add("Initialize", "PAM_Initialize_Extensions", function()

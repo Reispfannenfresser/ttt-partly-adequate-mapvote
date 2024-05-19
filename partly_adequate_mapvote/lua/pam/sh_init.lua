@@ -13,6 +13,9 @@ PAM.STATE_FINISHED = 2
 --the current state
 PAM.state = PAM.STATE_DISABLED
 
+-- vote type callbacks
+PAM.type_callbacks = {}
+
 --the voteable maps
 PAM.options = {}
 PAM.option_count = 0

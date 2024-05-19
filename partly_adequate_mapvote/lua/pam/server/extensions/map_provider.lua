@@ -4,6 +4,7 @@ PAM_EXTENSION.enabled = true
 
 local setting_namespace = PAM.setting_namespace:AddChild(name)
 
+local populate_from_info_setting = setting_namespace:AddSetting("populate_from_info", pacoman.TYPE_BOOLEAN, true, "Should the map list be populated from the gamemode 'maps' section in the gamemode txt file.")
 local prefixes_setting = setting_namespace:AddSetting("prefixes", pacoman.TYPE_STRING, "", "Maps where at least one of the prefixes fits, will be available for voting.")
 local blacklist_setting = setting_namespace:AddSetting("blacklist", pacoman.TYPE_STRING, "", "Maps that are listed here, won't be available, even when a prefix fits.")
 local whitelist_setting = setting_namespace:AddSetting("whitelist", pacoman.TYPE_STRING, "", "Maps that are listed here, will be available for voting, even when no prefix fits.")
@@ -32,6 +33,42 @@ local function SetMapCooldown(mapname, cooldown)
 	end
 end
 
+-- Support per gamemode
+PAM_EXTENSION.gamemode_maps_pattern = {}
+function PAM_EXTENSION:UpdateGamemodeMaps(gamemode)
+	-- If the data has previously been loaded, don't load it again
+	if self.gamemode_maps_pattern[gamemode] then return end
+
+	local info = file.Read("gamemodes/"..gamemode.."/"..gamemode..".txt", "GAME")
+
+	-- Empty var, so even if it couldn't be loaded it's set
+	self.gamemode_maps_pattern[gamemode] = {}
+	if (info) then
+		local info = util.KeyValuesToTable(info)
+		if (info.maps) then
+			self.gamemode_maps_pattern[gamemode] = string.Split(info.maps, "|")
+		elseif (info.fretta_maps) then
+			self.gamemode_maps_pattern[gamemode] = info.fretta_maps
+		end
+	end
+end
+
+function PAM_EXTENSION:OnGamemodeChanged(gamemode)
+	-- Load maps for new gamemode
+	self:UpdateGamemodeMaps(gamemode)
+end
+
+function PAM_EXTENSION:OnInitialize()
+	self:UpdateGamemodeMaps(engine.ActiveGamemode())
+end
+
+local function mapMatchesPattern(map, pattern)
+	for _, v in pairs(pattern) do
+		if string.match(map, v) then return true end
+	end
+	return false
+end
+
 function PAM_EXTENSION:RegisterOptions()
 	if PAM.vote_type ~= "map" then return end
 
@@ -42,6 +79,20 @@ function PAM_EXTENSION:RegisterOptions()
 	local blacklist = blacklist_setting:GetActiveValue()
 	local whitelist = whitelist_setting:GetActiveValue()
 	local limit = limit_setting:GetActiveValue()
+
+	-- In case the prefixes setting is an empty string, it will still populate it to have 1 item
+	-- So if it's got an empty one, we remove it
+	if #prefixes == 1 and prefixes[1] == "" then
+		prefixes[1] = nil
+	end
+	
+	-- Using the convar gamemode to get the active gamemode as the gamemode extension will change the gamemode convar
+	local current_gamemode = gamemode_name or GetConVar("gamemode"):GetString() or engine.ActiveGamemode()
+	
+	-- Somehow gamemode maps are not loaded, let's try loading them
+	if populate_from_info_setting:GetActiveValue() and not self.gamemode_maps_pattern[current_gamemode] then
+		self:UpdateGamemodeMaps(current_gamemode)
+	end
 
 	for _, map in RandomPairs(all_maps) do
 		map = map:sub(1, -5)
@@ -67,8 +118,16 @@ function PAM_EXTENSION:RegisterOptions()
 			continue
 		end
 
+		if populate_from_info_setting:GetActiveValue() and
+				self.gamemode_maps_pattern[current_gamemode] and #self.gamemode_maps_pattern[current_gamemode] > 0 and
+				mapMatchesPattern(map, self.gamemode_maps_pattern[current_gamemode]) then
+			PAM.RegisterOption(map)
+			continue
+		end
+
 		-- add all maps when no prefix is selected
-		if #prefixes == 0 then
+		if not (populate_from_info_setting:GetActiveValue() and self.gamemode_maps_pattern[current_gamemode] and #self.gamemode_maps_pattern[current_gamemode] > 0)
+				and #prefixes == 0 then
 			PAM.RegisterOption(map)
 			continue;
 		end
